@@ -12,6 +12,7 @@ This module lets you control Sharp/NEC Displays.
 * Power On/Off
 * Set Input
 * Set Volume Level
+* Set Audio mute
 
 ## Feedbacks
 

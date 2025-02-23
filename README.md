@@ -2,11 +2,11 @@
 
 See [HELP.md](./companion/HELP.md) and [LICENSE](./LICENSE)
 
-## Known limitations
-
-- Not all commands or options are working with the HEX protocol. Use ASCII protocol for full support.
-
 ## Version History
+
+### v1.2.0 (2025-mm-dd)
+
+- Added full support for hex protocol
 
 ### v1.1.0 (2024-02-23)
 

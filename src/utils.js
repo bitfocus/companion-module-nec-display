@@ -1,8 +1,20 @@
 const { InstanceStatus, TCPHelper } = require('@companion-module/base');
+const hexproto = require('./hexprotocol');
 
 module.exports = {
 	initConnection: function () {
 		let self = this;
+
+		try {
+			// Close connection before another is started (hex protocol allows only one concurrent connection)
+			if (self.socket) {
+				self.socket.destroy();
+				delete self.socket;
+			}
+		}
+		catch(error) {
+			self.log('debug', `Failed to close connection: ${error}`);
+		}
 
 		try {
 			self.log('info', `Opening connection to ${self.config.host}:${self.config.port}`);
@@ -67,9 +79,15 @@ module.exports = {
 			self.sendCommand('avmute audio ?')
 		}
 		else if (self.config.protocol == 'hex') {
-			self.sendCommand('\x01\x30\x41\x30\x41\x30\x36\x02\x30\x31\x44\x36\x03\x74\x0D'); //power
-			self.sendCommand('\x01\x30\x41\x30\x43\x30\x36\x02\x30\x30\x36\x30\x03\x03\x0D'); //input
-			self.sendCommand('\x01\x30\x41\x30\x43\x30\x36\x02\x30\x30\x36\x32\x03\x01\x0D'); //volume
+			if (self.step === undefined) {
+				self.step = 0
+			}
+
+			if (self.step === 0) self.sendCommand(hexproto.buildHexCommand(hexproto.MSGTYPE.CMD, '01D6')) // power
+			if (self.step === 1) self.sendCommand(hexproto.buildHexCommand(hexproto.MSGTYPE.GET_PARAM, hexproto.OPPAGE_INPUT + hexproto.OPCODE_INPUT)) // input
+			if (self.step === 2) self.sendCommand(hexproto.buildHexCommand(hexproto.MSGTYPE.GET_PARAM, hexproto.OPPAGE_VOLUME + hexproto.OPCODE_VOLUME)) // volume
+
+			self.step = (self.step + 1) % 3
 		}
 	},
 
@@ -130,52 +148,46 @@ module.exports = {
 			// }
 		}
 		else if (self.config.protocol == 'hex') {
-			//process hex responses here
-			let hex = data.toString('hex').toLowerCase();
-			if 		(hex == '01303041423132023032303044363030303030343030303403710d') {
-				//power is off
-				self.data.power = 'off';
-			}
-			else if (hex == '01303041423132023032303044363030303030343030303103740d') {
-				self.data.power = 'on';
-			}
-			else if (hex == '01303041443132023030303036303030303038383030313103010d') {
-				self.data.input = 'hdmi1';
-			}
-			else if (hex == '01303041443132023030303036303030303038383030313203020d') {
-				self.data.input = 'hdmi2';
-			}
-			else {
-				//split the hex string every 2 characters into an array
-				let hexArray = hex.match(/.{1,2}/g);
-				//find STX and ETX in the array
-				let stxIndex = hexArray.indexOf('02');
-				let etxIndex = hexArray.indexOf('03');
-				//now show payload in between STX and ETX
-				let payload = hexArray.slice(stxIndex+1, etxIndex).join('').match(/.{1,2}/g);
-				
-				console.log(payload);
-				//find the opPage and opCode
-				let opPage = String.fromCharCode(parseInt(payload[2], 16)) + String.fromCharCode(parseInt(payload[3], 16));
-				let opCode = String.fromCharCode(parseInt(payload[4], 16)) + String.fromCharCode(parseInt(payload[5], 16));
 
-				if (opPage == '00' && opCode == '62') { //volume
-					//current value is last 4 bytes of payload
-					let length = payload.length;
-					let byte1 = String.fromCharCode(parseInt(payload[length-4], 16));
-					let byte2 = String.fromCharCode(parseInt(payload[length-3], 16));
-					let byte3 = String.fromCharCode(parseInt(payload[length-2], 16));
-					let byte4 = String.fromCharCode(parseInt(payload[length-1], 16));
-					//add these 4 strings up and convert to hex, then to decimal
-					let cur = parseInt(byte1 + byte2 + byte3 + byte4, 16);
-					self.data.volume = cur;
+			if (self.config.verbose) self.log('info', 'Processing HEX data: ' + data.toString('hex'));
+			let response = hexproto.parseData(data)
+			if (self.config.verbose) self.log('info', 'Processed response: ' + JSON.stringify(response));
+
+			if (response === undefined) return
+
+			if (response.msgType === hexproto.MSGTYPE.CMD_REPLY) {
+				// cmd reply
+
+				const payload = response.payload.join('')
+				if (self.config.verbose) self.log('debug', 'CMD Reply payload is: ' + payload);
+				if (payload === '30323030443630303030303430303034' || payload === '303043323033443630303034') {
+					self.data.power = 'off';
 				}
+				else if (payload === '30323030443630303030303430303031' || payload === '303043323033443630303031') {
+					self.data.power = 'on';
+				}
+			} 
+			else if (response.msgType === hexproto.MSGTYPE.GET_PARAM_REPLY || response.msgType === hexproto.MSGTYPE.SET_PARAM_REPLY) {
+				// get parameter reply
 
+				const replyData = hexproto.parseGetSetParamReply(response.payload)
+				if (self.config.verbose) self.log('debug', 'PARAM Reply payload is: ' + JSON.stringify(replyData));
+				
+				if (replyData.success !== true) {
+					self.log('warn', `Get/Set Param failed: OP Page ${replyData.opPage}, OP Code ${replyData.opCode}, Value ${replyData.value}`);
+				} else {
+					if (replyData.opPage == hexproto.OPPAGE_INPUT && replyData.opCode == hexproto.OPCODE_INPUT) { // input
+						self.data.input = hexproto.getMappedInput(replyData.value)
+					} else if (replyData.opPage == hexproto.OPPAGE_VOLUME && replyData.opCode == hexproto.OPCODE_VOLUME) { // volume
+						self.data.volume = replyData.value;
+					} else if (replyData.opPage == hexproto.OPPAGE_AUDIOMUTE && replyData.opCode == hexproto.OPCODE_AUDIOMUTE) { // audio mute
+						self.data.audiomute = replyData.value === 1;
+					}
+				}				
 			}
-			self.checkFeedbacks();
+			self.checkFeedbacks()
 		}
-		self.checkVariables();
-
+		self.checkVariables()
 	},
 
 	setPower: function (inpower) {
@@ -194,12 +206,8 @@ module.exports = {
 			self.sendCommand('power ' + power);
 		}
 		else if (self.config.protocol == 'hex') {
-			if (power == 'on') {
-				self.sendCommand('\x01\x30\x41\x30\x41\x30\x43\x02\x43\x32\x30\x33\x44\x36\x30\x30\x30\x31\x03\x73\x0D');
-			}
-			else {
-				self.sendCommand('\x01\x30\x41\x30\x41\x30\x43\x02\x43\x32\x30\x33\x44\x36\x30\x30\x30\x34\x03\x76\x0D');
-			}
+			let cmd = hexproto.buildHexCommand(hexproto.MSGTYPE.CMD, 'C203D6000' + (power === 'on' ? '1' : '4'))
+			self.sendCommand(cmd)
 		}
 	},
 
@@ -210,36 +218,30 @@ module.exports = {
 			self.sendCommand('input ' + input);
 		}
 		else if (self.config.protocol == 'hex') {
+			let cmd = '';
 			switch(input) {
-				case 'hdmi1':
-					self.sendCommand('\x01\x30\x41\x30\x45\x30\x41\x02\x30\x30\x36\x30\x30\x30\x31\x31\x03\x72\x0D');							 
-					break;
-				case 'hdmi2':
-					self.sendCommand('\x01\x30\x41\x30\x45\x30\x41\x02\x30\x30\x36\x30\x30\x30\x31\x32\x03\x71\x0D');
-					break;
-				case 'hdmi3':
-					
-					break;
-				case 'displayport1':
-					
-					break;
-				case 'displayport2':
-					
-					break;
-				case 'displayport3':
-					
-					break;
-				case 'mp':
-					
-					break;
-				case 'compute_module':
-					
-					break;
-				case 'option':
-					
-					break;
+				case 'vga': 	cmd = '0001'; break;
+				case 'rgbhv':	cmd = '0002'; break;
+				case 'dvi':		cmd = '0003'; break;
+				case 'hdmi1':	cmd = '0004'; break;	// hdmi1 reads with 0017, but set only works with 0004 (on P461)
+				case 'video1':	cmd = '0005'; break;
+				case 'video2':	cmd = '0006'; break;
+				case 'svideo':	cmd = '0007'; break;
+				case 'tva':		cmd = '0009'; break;
+				case 'tvd':		cmd = '0010'; break;
+				case 'dvdhd1':	cmd = '0012'; break;
+				case 'option':	cmd = '0013'; break;
+				case 'dvdhd2':	cmd = '0014'; break;
+				case 'displayport1':	cmd = '0015'; break;
+				case 'displayport2':	cmd = '0016'; break;
+				case 'hdmi2':	cmd = '0018'; break;
 				default:
 					break;
+			}
+
+			if (cmd !== '') {
+				cmd = hexproto.buildHexCommand(hexproto.MSGTYPE.SET_PARAM, hexproto.OPPAGE_INPUT + hexproto.OPCODE_INPUT + cmd)
+				self.sendCommand(cmd)
 			}
 		}
 	},
@@ -248,25 +250,10 @@ module.exports = {
 		let self = this;
 
 		if (self.config.protocol == 'ascii') {
-			self.sendCommand('volume ' + volume);
+			self.sendCommand('volume ' + volume)
 		} else if (self.config.protocol == 'hex') {
-			let hexStringStart = '\x01\x30\x41\x30\x45\x30\x41\x02';
-			let hexOpPageCode = '\x30\x30\x36\x32';
-
-			//convert decimal volume to hex
-			let hexVol = '00' + volume.toString(16);
-
-			//now convert this as a string to hex
-			let hexVolArray = hexVol.split('');
-			let hexVolString = '';
-			hexVolArray.forEach(element => {
-				hexVolString += '\\x' + element.charCodeAt(0).toString(16) + '';
-			});
-
-			let hexStringFinish = '\x03\x71\x0D';
-
-			let hexTotal = hexStringStart + hexOpPageCode + hexVolString + hexStringFinish;
-			self.sendCommand(hexTotal);
+			let cmd = hexproto.buildHexCommand(hexproto.MSGTYPE.SET_PARAM, hexproto.OPPAGE_VOLUME + hexproto.OPCODE_VOLUME + volume.toString(16).padStart(4, '0'))
+			self.sendCommand(cmd)
 		}
 	},
 
@@ -296,7 +283,30 @@ module.exports = {
 
 		if (self.config.protocol == 'ascii') {
 			self.sendCommand(`avmute audio  ${self.data.audiomute ? 'on' : 'off'}`)
+		} else if (self.config.protocol == 'hex') {
+			let cmd = hexproto.buildHexCommand(hexproto.MSGTYPE.SET_PARAM, hexproto.OPPAGE_AUDIOMUTE + hexproto.OPCODE_AUDIOMUTE + (self.data.audiomute ? 1 : 0).toString(16).padStart(4, '0'))
+			self.sendCommand(cmd)
 		}
 
+	},
+
+	getInputChoices: function(protocol) {
+		if (protocol === 'ascii') {
+			return [
+				{ id: 'hdmi1', label: 'HDMI1' },
+				{ id: 'hdmi2', label: 'HDMI2' },
+				{ id: 'hdmi3', label: 'HDMI3' },
+				{ id: 'displayport1', label: 'Display Port 1' },
+				{ id: 'displayport2', label: 'Display Port 2' },
+				{ id: 'displayport3', label: 'Display Port 3' },
+				{ id: 'mp', label: 'MP' },
+				{ id: 'compute_module', label: 'Compute Module' },
+				{ id: 'option', label: 'Option' },
+			]
+		} else if (protocol === 'hex') {
+			return hexproto.getInputChoices()
+		}
+
+		return [];
 	}
 }

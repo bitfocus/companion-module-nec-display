@@ -23,6 +23,7 @@ module.exports = {
 			}
 		}
 
+		const inputChoices = self.getInputChoices(self.config.protocol);
 		actions.setInput = {
 			name: 'Set Input',
 			options: [
@@ -30,18 +31,8 @@ module.exports = {
 					type: 'dropdown',
 					label: 'Input',
 					id: 'input',
-					default: 'hdmi1',
-					choices: [
-						{ id: 'hdmi1', label: 'HDMI1' },
-						{ id: 'hdmi2', label: 'HDMI2' },
-						{ id: 'hdmi3', label: 'HDMI3' },
-						{ id: 'displayport1', label: 'Display Port 1' },
-						{ id: 'displayport2', label: 'Display Port 2' },
-						{ id: 'displayport3', label: 'Display Port 3' },
-						{ id: 'mp', label: 'MP' },
-						{ id: 'compute_module', label: 'Compute Module' },
-						{ id: 'option', label: 'Option' },
-					]
+					default: inputChoices.length > 0 ? inputChoices[0].id : '',
+					choices: inputChoices
 				}
 			],
 			callback: async function (action) {

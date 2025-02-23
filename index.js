@@ -30,7 +30,7 @@ class necDisplayInstance extends InstanceBase {
 			model: '',
 			serial: '',
 			power: 'off',
-			input: 'HDMI1',
+			input: '',
 			volume: 0,
 			audiomute: false
 		};
