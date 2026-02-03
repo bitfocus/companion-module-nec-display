@@ -11,7 +11,7 @@ module.exports = {
 		feedbacks.power = {
 			type: 'boolean',
 			name: 'Power is in X State',
-			description: 'Change colors of the bank if the Power is in X State',
+			description: 'True if the Power is in X State',
 			defaultStyle: {
 				color: foregroundColor,
 				bgcolor: backgroundColorRed,
@@ -26,9 +26,9 @@ module.exports = {
 						{ id: 'on', label: 'On' },
 						{ id: 'off', label: 'Off' },
 					],
-				}
+				},
 			],
-			callback: function (feedback, bank) {
+			callback: function (feedback) {
 				if (self.data.power == feedback.options.power) {
 					return true
 				}
@@ -41,7 +41,7 @@ module.exports = {
 		feedbacks.input = {
 			type: 'boolean',
 			name: 'Input is Selected',
-			description: 'Change colors of the bank if the Input is selected',
+			description: 'True if the Input is selected',
 			defaultStyle: {
 				color: foregroundColor,
 				bgcolor: backgroundColorRed,
@@ -52,10 +52,10 @@ module.exports = {
 					label: 'Input',
 					id: 'input',
 					default: inputChoices.length > 0 ? inputChoices[0].id : '',
-					choices: inputChoices
+					choices: inputChoices,
 				},
 			],
-			callback: function (feedback, bank) {
+			callback: function (feedback) {
 				if (self.data.input === feedback.options.input) {
 					return true
 				}
@@ -67,13 +67,13 @@ module.exports = {
 		feedbacks.audiomute = {
 			type: 'boolean',
 			name: 'Audio is Muted',
-			description: 'Change colors of the bank if the volume is muted',
+			description: 'True if the volume is muted',
 			defaultStyle: {
 				color: foregroundColor,
 				bgcolor: backgroundColorRed,
 			},
 			options: [],
-			callback: function (feedback) {
+			callback: function (_feedback) {
 				if (self.data.audiomute === true) {
 					return true
 				}
@@ -82,6 +82,6 @@ module.exports = {
 			},
 		}
 
-		self.setFeedbackDefinitions(feedbacks);
-	}
+		self.setFeedbackDefinitions(feedbacks)
+	},
 }

@@ -1,67 +1,65 @@
-const { InstanceStatus, TCPHelper } = require('@companion-module/base');
-const hexproto = require('./hexprotocol');
+const { InstanceStatus, TCPHelper } = require('@companion-module/base')
+const hexproto = require('./hexprotocol')
 
 module.exports = {
 	initConnection: function () {
-		let self = this;
+		let self = this
 
 		try {
 			// Close connection before another is started (hex protocol allows only one concurrent connection)
 			if (self.socket) {
-				self.socket.destroy();
-				delete self.socket;
+				self.socket.destroy()
+				delete self.socket
 			}
-		}
-		catch(error) {
-			self.log('debug', `Failed to close connection: ${error}`);
+		} catch (error) {
+			self.log('debug', `Failed to close connection: ${error}`)
 		}
 
 		try {
-			self.log('info', `Opening connection to ${self.config.host}:${self.config.port}`);
-	
-			self.socket = new TCPHelper(self.config.host, self.config.port);
-	
+			self.log('info', `Opening connection to ${self.config.host}:${self.config.port}`)
+
+			self.socket = new TCPHelper(self.config.host, self.config.port)
+
 			self.socket.on('error', function (err) {
 				if (self.config.verbose) {
-					self.log('warn', 'Error: ' + err);
+					self.log('warn', 'Error: ' + err)
 				}
-	
-				self.stopPolling();
-				self.updateStatus(InstanceStatus.ConnectionFailure);
-				console.log(err);
-			});
-	
-			self.socket.on('connect', function () {
-				self.updateStatus(InstanceStatus.Ok);
 
-				self.getInformation();
-				self.startPolling();
-			});
-	
-			self.socket.on('data', function(buffer) {
-				let indata = buffer.toString();
+				self.stopPolling()
+				self.updateStatus(InstanceStatus.ConnectionFailure)
+				console.log(err)
+			})
+
+			self.socket.on('connect', function () {
+				self.updateStatus(InstanceStatus.Ok)
+
+				self.getInformation()
+				self.startPolling()
+			})
+
+			self.socket.on('data', function (buffer) {
+				//let indata = buffer.toString();
 
 				self.processData(buffer)
-			});
-		}
-		catch(error) {
-			self.log('error', `Failed to connect to display: ${error}`);
-			self.updateStatus(InstanceStatus.ConnectionFailure);
+			})
+		} catch (error) {
+			self.log('error', `Failed to connect to display: ${error}`)
+			self.updateStatus(InstanceStatus.ConnectionFailure)
 		}
 	},
 
 	startPolling: function () {
-		let self = this;
+		let self = this
 
-		self.stopPolling(); //clear any existing timer
+		self.stopPolling() //clear any existing timer
 
 		if (self.config.enablePolling) {
-			self.timer = setInterval(self.getInformation, self.config.rate, self);
+			self.timer = setInterval(self.getInformation, self.config.rate, self)
 		}
 	},
 
 	stopPolling: function () {
-		let self = this;
+		let self = this
 
 		if (self.timer) {
 			clearInterval(self.timer)
@@ -69,51 +67,49 @@ module.exports = {
 		}
 	},
 
-	getInformation: function (scope) {
+	getInformation: async function (scope) {
 		let self = scope ? scope : this
 
 		if (self.config.protocol == 'ascii') {
-			self.sendCommand('power ?')
-			self.sendCommand('input ?')
-			self.sendCommand('volume ?')
-			self.sendCommand('avmute audio ?')
-		}
-		else if (self.config.protocol == 'hex') {
+			await self.sendCommand('power ?')
+			await self.sendCommand('input ?')
+			await self.sendCommand('volume ?')
+			await self.sendCommand('avmute audio ?')
+		} else if (self.config.protocol == 'hex') {
 			if (self.step === undefined) {
 				self.step = 0
 			}
 
-			if (self.step === 0) self.sendCommand(hexproto.buildHexCommand(hexproto.MSGTYPE.CMD, '01D6')) // power
-			if (self.step === 1) self.sendCommand(hexproto.buildHexCommand(hexproto.MSGTYPE.GET_PARAM, hexproto.OPPAGE_INPUT + hexproto.OPCODE_INPUT)) // input
-			if (self.step === 2) self.sendCommand(hexproto.buildHexCommand(hexproto.MSGTYPE.GET_PARAM, hexproto.OPPAGE_VOLUME + hexproto.OPCODE_VOLUME)) // volume
+			if (self.step === 0) await self.sendCommand(hexproto.buildHexCommand(hexproto.MSGTYPE.CMD, '01D6')) // power
+			if (self.step === 1) await self.sendCommand(hexproto.buildHexCommand(hexproto.MSGTYPE.GET_PARAM, hexproto.OPPAGE_INPUT + hexproto.OPCODE_INPUT)) // input
+			if (self.step === 2) await self.sendCommand(hexproto.buildHexCommand(hexproto.MSGTYPE.GET_PARAM, hexproto.OPPAGE_VOLUME + hexproto.OPCODE_VOLUME)) // volume
 
 			self.step = (self.step + 1) % 3
 		}
 	},
 
-	sendCommand: function (command) {
-		let self = this;
+	sendCommand: async function (command) {
+		let self = this
 
-		let hex = command;
+		let hex = command
 
-		if (self.config.verbose) self.log('info', 'Sending command: ' + command);
+		if (self.config.verbose) self.log('info', 'Sending command: ' + command)
 		if (self.config.protocol == 'ascii') {
 			//convert to hexadecimal and send
 			hex = Buffer.from(command + '\r', 'ascii')
-		}
-		else {
+		} else {
 			//hex = parseInt(command, 16);
 		}
 
-		self.socket.send(hex)
+		await self.socket.send(hex)
 	},
 
 	processData: function (data) {
-		let self = this;
+		let self = this
 
 		if (self.config.protocol == 'ascii') {
 			//convert hex response to ascii
-			let response = data.toString('ascii');
+			let response = data.toString('ascii')
 
 			//self.log('info', 'Processing ASCII data: ' + response);
 
@@ -124,34 +120,32 @@ module.exports = {
 
 			//console.log('command', command, 'data', cur)
 
-				switch(command) {
-					case 'power':
-						self.data.power = cur;
-						self.checkFeedbacks('power');
-						break;
-					case 'input':
-						self.data.input = cur;
-						self.checkFeedbacks('input');
-						break;
-					case 'volume':
-						self.data.volume = parseInt(cur);
-						
-						break;
-					case 'avmute audio':
-						if (cur === 'on') self.data.audiomute = true 
-						else self.data.audiomute = false
-						self.checkFeedbacks('audiomute');
-						break;
-					default:
-						break;
-				}
-			// }
-		}
-		else if (self.config.protocol == 'hex') {
+			switch (command) {
+				case 'power':
+					self.data.power = cur
+					self.checkFeedbacks('power')
+					break
+				case 'input':
+					self.data.input = cur
+					self.checkFeedbacks('input')
+					break
+				case 'volume':
+					self.data.volume = parseInt(cur)
 
-			if (self.config.verbose) self.log('info', 'Processing HEX data: ' + data.toString('hex'));
+					break
+				case 'avmute audio':
+					if (cur === 'on') self.data.audiomute = true
+					else self.data.audiomute = false
+					self.checkFeedbacks('audiomute')
+					break
+				default:
+					break
+			}
+			// }
+		} else if (self.config.protocol == 'hex') {
+			if (self.config.verbose) self.log('info', 'Processing HEX data: ' + data.toString('hex'))
 			let response = hexproto.parseData(data)
-			if (self.config.verbose) self.log('info', 'Processed response: ' + JSON.stringify(response));
+			if (self.config.verbose) self.log('info', 'Processed response: ' + JSON.stringify(response))
 
 			if (response === undefined) return
 
@@ -159,39 +153,40 @@ module.exports = {
 				// cmd reply
 
 				const payload = response.payload.join('')
-				if (self.config.verbose) self.log('debug', 'CMD Reply payload is: ' + payload);
+				if (self.config.verbose) self.log('debug', 'CMD Reply payload is: ' + payload)
 				if (payload === '30323030443630303030303430303034' || payload === '303043323033443630303034') {
-					self.data.power = 'off';
+					self.data.power = 'off'
+				} else if (payload === '30323030443630303030303430303031' || payload === '303043323033443630303031') {
+					self.data.power = 'on'
 				}
-				else if (payload === '30323030443630303030303430303031' || payload === '303043323033443630303031') {
-					self.data.power = 'on';
-				}
-			} 
-			else if (response.msgType === hexproto.MSGTYPE.GET_PARAM_REPLY || response.msgType === hexproto.MSGTYPE.SET_PARAM_REPLY) {
+			} else if (response.msgType === hexproto.MSGTYPE.GET_PARAM_REPLY || response.msgType === hexproto.MSGTYPE.SET_PARAM_REPLY) {
 				// get parameter reply
 
 				const replyData = hexproto.parseGetSetParamReply(response.payload)
-				if (self.config.verbose) self.log('debug', 'PARAM Reply payload is: ' + JSON.stringify(replyData));
-				
+				if (self.config.verbose) self.log('debug', 'PARAM Reply payload is: ' + JSON.stringify(replyData))
+
 				if (replyData.success !== true) {
-					self.log('warn', `Get/Set Param failed: OP Page ${replyData.opPage}, OP Code ${replyData.opCode}, Value ${replyData.value}`);
+					self.log('warn', `Get/Set Param failed: OP Page ${replyData.opPage}, OP Code ${replyData.opCode}, Value ${replyData.value}`)
 				} else {
-					if (replyData.opPage == hexproto.OPPAGE_INPUT && replyData.opCode == hexproto.OPCODE_INPUT) { // input
+					if (replyData.opPage == hexproto.OPPAGE_INPUT && replyData.opCode == hexproto.OPCODE_INPUT) {
+						// input
 						self.data.input = hexproto.getMappedInput(replyData.value)
-					} else if (replyData.opPage == hexproto.OPPAGE_VOLUME && replyData.opCode == hexproto.OPCODE_VOLUME) { // volume
-						self.data.volume = replyData.value;
-					} else if (replyData.opPage == hexproto.OPPAGE_AUDIOMUTE && replyData.opCode == hexproto.OPCODE_AUDIOMUTE) { // audio mute
-						self.data.audiomute = replyData.value === 1;
+					} else if (replyData.opPage == hexproto.OPPAGE_VOLUME && replyData.opCode == hexproto.OPCODE_VOLUME) {
+						// volume
+						self.data.volume = replyData.value
+					} else if (replyData.opPage == hexproto.OPPAGE_AUDIOMUTE && replyData.opCode == hexproto.OPCODE_AUDIOMUTE) {
+						// audio mute
+						self.data.audiomute = replyData.value === 1
 					}
-				}				
+				}
 			}
 			self.checkFeedbacks()
 		}
 		self.checkVariables()
 	},
 
-	setPower: function (inpower) {
-		let self = this;
+	setPower: async function (inpower) {
+		let self = this
 		let power = 'on'
 
 		if (inpower === 'toggle' && self.data.power === 'on') {
@@ -203,61 +198,89 @@ module.exports = {
 		}
 
 		if (self.config.protocol == 'ascii') {
-			self.sendCommand('power ' + power);
-		}
-		else if (self.config.protocol == 'hex') {
+			await self.sendCommand('power ' + power)
+		} else if (self.config.protocol == 'hex') {
 			let cmd = hexproto.buildHexCommand(hexproto.MSGTYPE.CMD, 'C203D6000' + (power === 'on' ? '1' : '4'))
-			self.sendCommand(cmd)
+			await self.sendCommand(cmd)
 		}
 	},
 
-	setInput: function (input) {
-		let self = this;
+	setInput: async function (input) {
+		let self = this
 
 		if (self.config.protocol == 'ascii') {
-			self.sendCommand('input ' + input);
-		}
-		else if (self.config.protocol == 'hex') {
-			let cmd = '';
-			switch(input) {
-				case 'vga': 	cmd = '0001'; break;
-				case 'rgbhv':	cmd = '0002'; break;
-				case 'dvi':		cmd = '0003'; break;
-				case 'hdmi1':	cmd = '0004'; break;	// hdmi1 reads with 0017, but set only works with 0004 (on P461)
-				case 'video1':	cmd = '0005'; break;
-				case 'video2':	cmd = '0006'; break;
-				case 'svideo':	cmd = '0007'; break;
-				case 'tva':		cmd = '0009'; break;
-				case 'tvd':		cmd = '0010'; break;
-				case 'dvdhd1':	cmd = '0012'; break;
-				case 'option':	cmd = '0013'; break;
-				case 'dvdhd2':	cmd = '0014'; break;
-				case 'displayport1':	cmd = '0015'; break;
-				case 'displayport2':	cmd = '0016'; break;
-				case 'hdmi2':	cmd = '0018'; break;
+			await self.sendCommand('input ' + input)
+		} else if (self.config.protocol == 'hex') {
+			let cmd = ''
+			switch (input) {
+				case 'vga':
+					cmd = '0001'
+					break
+				case 'rgbhv':
+					cmd = '0002'
+					break
+				case 'dvi':
+					cmd = '0003'
+					break
+				case 'hdmi1':
+					cmd = '0004'
+					break // hdmi1 reads with 0017, but set only works with 0004 (on P461)
+				case 'video1':
+					cmd = '0005'
+					break
+				case 'video2':
+					cmd = '0006'
+					break
+				case 'svideo':
+					cmd = '0007'
+					break
+				case 'tva':
+					cmd = '0009'
+					break
+				case 'tvd':
+					cmd = '0010'
+					break
+				case 'dvdhd1':
+					cmd = '0012'
+					break
+				case 'option':
+					cmd = '0013'
+					break
+				case 'dvdhd2':
+					cmd = '0014'
+					break
+				case 'displayport1':
+					cmd = '0015'
+					break
+				case 'displayport2':
+					cmd = '0016'
+					break
+				case 'hdmi2':
+					cmd = '0018'
+					break
 				default:
-					break;
+					break
 			}
 
 			if (cmd !== '') {
 				cmd = hexproto.buildHexCommand(hexproto.MSGTYPE.SET_PARAM, hexproto.OPPAGE_INPUT + hexproto.OPCODE_INPUT + cmd)
-				self.sendCommand(cmd)
+				await self.sendCommand(cmd)
 			}
 		}
 	},
 
-	setVolume: function (volume) {
-		let self = this;
+	setVolume: async function (volume) {
+		let self = this
 
 		if (self.config.protocol == 'ascii') {
-			self.sendCommand('volume ' + volume)
+			await self.sendCommand('volume ' + volume)
 		} else if (self.config.protocol == 'hex') {
 			let cmd = hexproto.buildHexCommand(hexproto.MSGTYPE.SET_PARAM, hexproto.OPPAGE_VOLUME + hexproto.OPCODE_VOLUME + volume.toString(16).padStart(4, '0'))
-			self.sendCommand(cmd)
+			await self.sendCommand(cmd)
 		}
 	},
 
-	setAudioMute: function(mute) {
+	setAudioMute: async function (mute) {
 		let self = this
 
 		if (self.data.audiomute !== true && self.data.audiomute !== false) {
@@ -274,23 +297,22 @@ module.exports = {
 			switch (mute) {
 				case 'on':
 					self.data.audiomute = true
-					break;
+					break
 				case 'off':
 					self.data.audiomute = false
-					break;
+					break
 			}
 		}
 
 		if (self.config.protocol == 'ascii') {
-			self.sendCommand(`avmute audio  ${self.data.audiomute ? 'on' : 'off'}`)
+			await self.sendCommand(`avmute audio  ${self.data.audiomute ? 'on' : 'off'}`)
 		} else if (self.config.protocol == 'hex') {
 			let cmd = hexproto.buildHexCommand(hexproto.MSGTYPE.SET_PARAM, hexproto.OPPAGE_AUDIOMUTE + hexproto.OPCODE_AUDIOMUTE + (self.data.audiomute ? 1 : 0).toString(16).padStart(4, '0'))
-			self.sendCommand(cmd)
+			await self.sendCommand(cmd)
 		}
-
 	},
 
-	getInputChoices: function(protocol) {
+	getInputChoices: function (protocol) {
 		if (protocol === 'ascii') {
 			return [
 				{ id: 'hdmi1', label: 'HDMI1' },
@@ -307,6 +329,6 @@ module.exports = {
 			return hexproto.getInputChoices()
 		}
 
-		return [];
-	}
+		return []
+	},
 }

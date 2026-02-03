@@ -1,13 +1,13 @@
-const { InstanceBase, InstanceStatus, runEntrypoint } = require('@companion-module/base');
-const UpgradeScripts = require('./src/upgrades');
+const { InstanceBase, InstanceStatus, runEntrypoint } = require('@companion-module/base')
+const UpgradeScripts = require('./src/upgrades')
 
-const config = require('./src/config');
-const actions = require('./src/actions');
-const feedbacks = require('./src/feedbacks');
-const variables = require('./src/variables');
-const presets = require('./src/presets');
+const config = require('./src/config')
+const actions = require('./src/actions')
+const feedbacks = require('./src/feedbacks')
+const variables = require('./src/variables')
+const presets = require('./src/presets')
 
-const utils = require('./src/utils');
+const utils = require('./src/utils')
 
 class necDisplayInstance extends InstanceBase {
 	constructor(internal) {
@@ -23,39 +23,48 @@ class necDisplayInstance extends InstanceBase {
 			...utils,
 		})
 
-		this.timer = undefined; //used for polling the device
-		this.display = undefined; //used for the connection
-		
+		this.timer = undefined //used for polling the device
+		this.display = undefined //used for the connection
+
 		this.data = {
 			model: '',
 			serial: '',
 			power: 'off',
 			input: '',
 			volume: 0,
-			audiomute: false
-		};
+			audiomute: false,
+		}
 	}
 
 	async destroy() {
-		this.stopPolling();
+		this.stopPolling()
+		try {
+			// Close connection before another is started (hex protocol allows only one concurrent connection)
+			if (this.socket) {
+				this.socket.destroy()
+				delete this.socket
+			}
+		} catch (error) {
+			this.log('debug', `Failed to close connection: ${error}`)
+		}
 	}
 
 	async init(config) {
-		this.configUpdated(config);
+		this.configUpdated(config)
 	}
 
 	async configUpdated(config) {
-		this.config = config;
-		
-		this.initActions();
-		this.initFeedbacks();
-		this.initVariables();
-		this.initPresets();
+		this.config = config
 
-		this.updateStatus(InstanceStatus.Connecting);
+		this.initActions()
+		this.initFeedbacks()
+		this.initVariables()
+		this.initPresets()
 
-		this.initConnection();
+		this.updateStatus(InstanceStatus.Connecting)
+
+		this.initConnection()
 	}
 }
 
-runEntrypoint(necDisplayInstance, UpgradeScripts);
+runEntrypoint(necDisplayInstance, UpgradeScripts)
