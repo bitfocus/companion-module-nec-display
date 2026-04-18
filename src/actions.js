@@ -1,7 +1,7 @@
 module.exports = {
 	initActions: function () {
-		let self = this;
-		let actions = {};
+		let self = this
+		let actions = {}
 
 		actions.setPower = {
 			name: 'Power',
@@ -15,15 +15,15 @@ module.exports = {
 						{ id: 'on', label: 'On' },
 						{ id: 'off', label: 'Off' },
 						{ id: 'toggle', label: 'Toggle' },
-					]
-				}
+					],
+				},
 			],
 			callback: async function (action) {
-				self.setPower(action.options.power);
-			}
+				await self.setPower(action.options.power)
+			},
 		}
 
-		const inputChoices = self.getInputChoices(self.config.protocol);
+		const inputChoices = self.getInputChoices(self.config.protocol)
 		actions.setInput = {
 			name: 'Set Input',
 			options: [
@@ -32,12 +32,12 @@ module.exports = {
 					label: 'Input',
 					id: 'input',
 					default: inputChoices.length > 0 ? inputChoices[0].id : '',
-					choices: inputChoices
-				}
+					choices: inputChoices,
+				},
 			],
 			callback: async function (action) {
-				self.setInput(action.options.input);
-			}
+				await self.setInput(action.options.input)
+			},
 		}
 
 		actions.setVolume = {
@@ -53,11 +53,11 @@ module.exports = {
 					required: true,
 					range: false,
 					regex: self.REGEX_NUMBER,
-				}
+				},
 			],
 			callback: async function (action) {
-				self.setVolume(action.options.volume);
-			}
+				await self.setVolume(action.options.volume)
+			},
 		}
 
 		actions.setAudioMute = {
@@ -68,18 +68,18 @@ module.exports = {
 					label: 'Mute',
 					id: 'mute',
 					choices: [
-						{id: 'on', label: 'Mute'},
-						{id: 'off', label: 'Unmute'},
-						{id: 'toggle', label: 'Toggle'},
+						{ id: 'on', label: 'Mute' },
+						{ id: 'off', label: 'Unmute' },
+						{ id: 'toggle', label: 'Toggle' },
 					],
-					default: 'toggle'
-				}
+					default: 'toggle',
+				},
 			],
 			callback: async function (action) {
-				self.setAudioMute(action.options.mute);
-			}
+				await self.setAudioMute(action.options.mute)
+			},
 		}
 
-		self.setActionDefinitions(actions);
-	}
+		self.setActionDefinitions(actions)
+	},
 }

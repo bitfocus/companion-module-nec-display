@@ -4,9 +4,10 @@ See [HELP.md](./companion/HELP.md) and [LICENSE](./LICENSE)
 
 ## Version History
 
-### v1.2.0 (2025-mm-dd)
+### v1.2.0 (2026-04-20)
 
 - Added full support for hex protocol
+- Bug fixes
 
 ### v1.1.0 (2024-02-23)
 
