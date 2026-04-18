@@ -18,10 +18,10 @@
     "@companion-module/base": "~1.14.1"
   },
   "devDependencies": {
-    "@companion-module/tools": "^2.6.1",
-    "eslint": "^9.39.2",
-    "jest": "^30.2.0",
-    "prettier": "^3.8.1"
+    "@companion-module/tools": "^2.7.1",
+    "eslint": "^9.39.4",
+    "jest": "^30.3.0",
+    "prettier": "^3.8.3"
   },
   "engines": {
     "node": "^22.17",
