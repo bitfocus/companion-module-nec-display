@@ -1,5 +1,7 @@
 {
+	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
 	"id": "nec-display",
+	"type": "connection",
 	"name": "nec-display",
 	"shortname": "nec-display",
 	"description": "Controls Sharp/NEC Displays.",
